@@ -114,5 +114,4 @@ MIT License
 
 ## 👨‍💻 Author
 
-Krishna
-GitHub: https://github.com/krishnashahane
+Krishna(https://github.com/krishnashahane)
