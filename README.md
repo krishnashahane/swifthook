@@ -105,13 +105,10 @@ Contributions are welcome.
 4. Submit a pull request
 
 ---
+## 👨‍💻 Author
+
+<a href="https://github.com/krishnashahane">Krishna</a>
 
 ## 📜 License
 
 MIT License
-
----
-
-## 👨‍💻 Author
-
-Krishna(https://github.com/krishnashahane)
