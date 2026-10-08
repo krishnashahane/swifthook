@@ -12,6 +12,8 @@ class Greeter: NSObject {
     @objc dynamic func doNothing() {}
 }
 
+final class ChildGreeter: Greeter {}
+
 class SwiftHookTests: XCTestCase {
 
     override func setUp() {
@@ -37,6 +39,25 @@ class SwiftHookTests: XCTestCase {
 
         try hook.revertAll()
         XCTAssertEqual(Greeter().greet(), "Hello")
+    }
+
+    func testClassPatchCanHookInheritedMethod() throws {
+        let hook = try SwiftHook(ChildGreeter.self) {
+            try $0.hook(
+                #selector(Greeter.greet),
+                methodSignature: (@convention(c) (AnyObject, Selector) -> String).self,
+                hookSignature: (@convention(block) (AnyObject) -> String).self
+            ) { patch in
+                { object in
+                    patch.original(object, patch.selector) + " Child"
+                }
+            }
+        }
+
+        XCTAssertEqual(ChildGreeter().greet(), "Hello Child")
+
+        try hook.revertAll()
+        XCTAssertEqual(ChildGreeter().greet(), "Hello")
     }
 
     func testClassPatchWithIntReturn() throws {
