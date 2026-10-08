@@ -16,7 +16,9 @@ extension SwiftHook {
             builder: (ClassPatch<MethodSig, HookSig>) -> HookSig?
         ) throws {
             try super.init(targetClass: `class`, selector: selector)
-            let block = builder(self) as Any
+            guard let block = builder(self) else {
+                throw SwiftHookError.internalFailure("Hook builder returned nil")
+            }
             installedIMP = imp_implementationWithBlock(block)
         }
 
@@ -25,11 +27,31 @@ extension SwiftHook {
         override func performActivation() throws {
             let method = try ensureMethodExists()
             let encoding = method_getTypeEncoding(method)
-            savedIMP = class_replaceMethod(targetClass, selector, installedIMP, encoding)
+            let inheritedIMP = method_getImplementation(method)
+
+            if classDeclaresSelector(targetClass, selector) {
+                savedIMP = class_replaceMethod(targetClass, selector, installedIMP, encoding)
+            } else {
+                savedIMP = inheritedIMP
+                guard class_addMethod(targetClass, selector, installedIMP, encoding) else {
+                    throw SwiftHookError.methodInjectionFailed(targetClass, selector)
+                }
+            }
+
             guard savedIMP != nil else {
                 throw SwiftHookError.missingImplementation(targetClass, selector)
             }
             SwiftHook.log("Patched -[\(targetClass).\(selector)] \(savedIMP!) -> \(installedIMP!)")
+        }
+
+        private func classDeclaresSelector(_ klass: AnyClass, _ sel: Selector) -> Bool {
+            var count: UInt32 = 0
+            guard let methods = class_copyMethodList(klass, &count) else { return false }
+            defer { free(methods) }
+            for index in 0..<Int(count) {
+                if method_getName(methods[index]) == sel { return true }
+            }
+            return false
         }
 
         // MARK: - Deactivation
