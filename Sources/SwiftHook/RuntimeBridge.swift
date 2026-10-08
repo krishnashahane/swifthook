@@ -44,7 +44,9 @@ final class RuntimeBridge {
 
     private func buildNew() throws -> AnyClass {
         let perceivedClass: AnyClass = type(of: object)
-        let realClass: AnyClass = object_getClass(object)!
+        guard let realClass = object_getClass(object) else {
+            throw SwiftHookError.internalFailure("Unable to resolve runtime class for target object")
+        }
 
         let baseName = NSStringFromClass(perceivedClass)
         let tag = ProcessInfo.processInfo.globallyUniqueString
@@ -52,10 +54,8 @@ final class RuntimeBridge {
         let subclassName = "\(Constant.prefix)\(baseName)_\(tag)"
 
         let allocated: AnyClass? = subclassName.withCString { cName in
-            // Check for collision first.
-            // swiftlint:disable:next force_cast
-            if let existing = objc_getClass(cName) as! AnyClass? {
-                return existing
+            if let existing = objc_getClass(cName) {
+                return existing as AnyClass
             }
             guard let pair = objc_allocateClassPair(realClass, cName, 0) else {
                 return nil
@@ -71,8 +71,14 @@ final class RuntimeBridge {
                 ownerClass: perceivedClass, proposedName: subclassName)
         }
 
-        object_setClass(object, result)
-        let parent = NSStringFromClass(class_getSuperclass(object_getClass(object)!)!)
+        guard object_setClass(object, result) != nil else {
+            throw SwiftHookError.internalFailure("Unable to attach runtime subclass to target object")
+        }
+
+        guard let parentClass = class_getSuperclass(result) else {
+            throw SwiftHookError.internalFailure("Runtime subclass has no superclass")
+        }
+        let parent = NSStringFromClass(parentClass)
         SwiftHook.log("Created \(NSStringFromClass(result)) (parent: \(parent))")
         return result
     }
@@ -106,23 +112,38 @@ final class RuntimeBridge {
         NSClassFromString("SuperForwarder")?.value(forKey: "isArchitectureSupported") as? Bool ?? false
     }
 
-    private lazy var addSuperIMP: @convention(c) (AnyClass, Selector, NSErrorPointer) -> Bool = {
-        let handle = dlopen(nil, RTLD_LAZY)
-        let sym = dlsym(handle, "SHKInstallSuperForwarder")
+    private lazy var addSuperIMP: (@convention(c) (AnyClass, Selector, NSErrorPointer) -> Bool)? = {
+        guard let handle = dlopen(nil, RTLD_LAZY) else {
+            return nil
+        }
+        guard let sym = dlsym(handle, "SHKInstallSuperForwarder") else {
+            dlclose(handle)
+            return nil
+        }
         return unsafeBitCast(sym, to: (@convention(c) (AnyClass, Selector, NSErrorPointer) -> Bool).self)
     }()
 
-    func installSuperTrampoline(for selector: Selector) {
-        var err: NSError?
-        if addSuperIMP(runtimeSubclass, selector, &err) == false {
-            SwiftHook.log("Super trampoline failed for -[\(runtimeSubclass).\(selector)]: \(err!)")
-        } else {
-            let imp = class_getMethodImplementation(runtimeSubclass, selector)!
-            SwiftHook.log("Super trampoline installed for -[\(runtimeSubclass).\(selector)]: \(imp)")
+    func installSuperTrampoline(for selector: Selector) -> Bool {
+        guard let addSuperIMP else {
+            SwiftHook.log("Super trampoline unavailable: SHKInstallSuperForwarder symbol not found")
+            return false
         }
+
+        var err: NSError?
+        guard addSuperIMP(runtimeSubclass, selector, &err) else {
+            SwiftHook.log("Super trampoline failed for -[\(runtimeSubclass).\(selector)]: \(err?.localizedDescription ?? "unknown error")")
+            return false
+        }
+
+        guard let imp = class_getMethodImplementation(runtimeSubclass, selector) else {
+            SwiftHook.log("Super trampoline installed but IMP lookup failed for -[\(runtimeSubclass).\(selector)]")
+            return false
+        }
+        SwiftHook.log("Super trampoline installed for -[\(runtimeSubclass).\(selector)]: \(imp)")
+        return true
     }
     #else
     static var canBuildSuperTrampolines: Bool { false }
-    func installSuperTrampoline(for selector: Selector) {}
+    func installSuperTrampoline(for selector: Selector) -> Bool { false }
     #endif
 }
