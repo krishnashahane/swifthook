@@ -26,8 +26,10 @@ extension SwiftHook {
             self.target = object
             try super.init(targetClass: type(of: object), selector: selector)
 
-            let block = builder(self) as AnyObject
-            installedIMP = imp_implementationWithBlock(block)
+            guard let block = builder(self) else {
+                throw SwiftHookError.internalFailure("Hook builder returned nil")
+            }
+            installedIMP = imp_implementationWithBlock(block as Any)
             guard installedIMP != nil else {
                 throw SwiftHookError.internalFailure(
                     "imp_implementationWithBlock returned nil for \(block)")
