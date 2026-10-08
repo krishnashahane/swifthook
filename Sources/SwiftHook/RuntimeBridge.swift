@@ -3,6 +3,10 @@
 
 import Foundation
 
+#if !os(Linux)
+import Darwin
+#endif
+
 /// Creates and manages a dynamic subclass at runtime so that
 /// per-object hooks do not affect the entire class hierarchy.
 final class RuntimeBridge {
