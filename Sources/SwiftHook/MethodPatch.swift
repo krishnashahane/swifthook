@@ -81,14 +81,15 @@ public class MethodPatch {
 
     /// Release the block-backed IMP when possible.
     public func teardown() {
+        guard installedIMP != nil else { return }
         switch phase {
         case .idle:
             SwiftHook.log("Releasing -[\(targetClass).\(selector)] IMP: \(installedIMP!)")
-            imp_removeBlock(installedIMP)
+            _ = imp_removeBlock(installedIMP)
         case .active:
             SwiftHook.log("Keeping -[\(targetClass).\(selector)] IMP: \(installedIMP!)")
         case let .failed(err):
-            SwiftHook.log("Leaking -[\(targetClass).\(selector)] IMP: \(installedIMP!) error: \(err)")
+            SwiftHook.log("Keeping failed patch IMP: \(installedIMP!) error: \(err)")
         }
     }
 
@@ -101,6 +102,10 @@ public class MethodPatch {
         } catch let error as SwiftHookError {
             phase = .failed(error)
             throw error
+        } catch {
+            let wrapped = SwiftHookError.internalFailure(error.localizedDescription)
+            phase = .failed(wrapped)
+            throw wrapped
         }
     }
 }
