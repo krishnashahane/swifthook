@@ -96,12 +96,8 @@ extension SwiftHook {
             let alreadyOverridden = classDirectlyDeclaresSelector(runtimeClass, selector)
             let encoding = method_getTypeEncoding(method)
 
-            if hasSuperForwarder {
-                // Install a super-trampoline first if the subclass doesn't override yet.
-                if !alreadyOverridden {
-                    bridge!.installSuperTrampoline(for: selector)
-                }
-                // Now replace — the trampoline guarantees an existing method entry.
+            if hasSuperForwarder && !alreadyOverridden && bridge!.installSuperTrampoline(for: selector) {
+                // The installed trampoline guarantees an existing entry, so replace it.
                 savedIMP = class_replaceMethod(runtimeClass, selector, installedIMP, encoding)
                 guard savedIMP != nil else {
                     throw SwiftHookError.missingImplementation(runtimeClass, selector)
