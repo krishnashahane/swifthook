@@ -89,7 +89,7 @@ private enum DylibObserver {
 
     private static var pending: [SwiftHook.PendingPatch] = {
         // Defer registration to avoid deadlock with Swift global init.
-        DispatchQueue.main.async { registerImageCallback() }
+        DispatchQueue.global(qos: .utility).async { registerImageCallback() }
         return []
     }()
 
@@ -109,9 +109,6 @@ private enum DylibObserver {
                         return true // class not loaded yet, keep waiting
                     } catch {
                         SwiftHook.log("Deferred patch error: \(error)")
-                        #if DEBUG
-                        fatalError("SwiftHook deferred patch error: \(error)")
-                        #endif
                         return false
                     }
                 }
