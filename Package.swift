@@ -1,4 +1,4 @@
-// swift-tools-version:5.0
+// swift-tools-version:5.7
 // SwiftHook - A Swift method hooking library
 // Created by Krishna
 
